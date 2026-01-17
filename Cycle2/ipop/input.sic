@@ -1,8 +1,0 @@
-COPY    START   1000
-FIRST   LDA     ALPHA
-**      ADD     BETA
-**      STA     GAMMA
-ALPHA   WORD    5
-BETA    WORD    3
-GAMMA   RESW    1
-**      END     FIRST
