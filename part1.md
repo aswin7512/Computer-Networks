@@ -291,7 +291,6 @@ int main() {
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     printf("Starting GBN Sender (Window Size: %d)\n", WINDOW_SIZE);
     while (base < TOTAL_PACKETS) {
-        // Send packets within the window
         while (next_seq < base + WINDOW_SIZE && next_seq < TOTAL_PACKETS) {
             Packet p;
             p.seq_num = next_seq;
@@ -671,4 +670,294 @@ Received: Frame 3
 Sending ACK for frame 3
 Received: Frame 4
 Sending ACK for frame 4
+```
+
+# DVR Algorithm
+### main.c
+```c
+#include <stdio.h>
+#define MAX_NODES 20
+#define INF 9999
+struct RoutingTable {
+    unsigned dist[MAX_NODES];
+    unsigned next_hop[MAX_NODES];
+} rt[MAX_NODES];
+
+int main() {
+    int cost_matrix[MAX_NODES][MAX_NODES];
+    int nodes, i, j, k, update_count = 0;
+    printf("Enter the number of nodes: ");
+    scanf("%d", &nodes);
+    printf("\nEnter the cost matrix (use %d for infinity/no direct link):\n", INF);
+    for (i = 0; i < nodes; i++) {
+        for (j = 0; j < nodes; j++) {
+            scanf("%d", &cost_matrix[i][j]);
+            if (i == j) {
+                cost_matrix[i][i] = 0;
+            }
+            rt[i].dist[j] = cost_matrix[i][j];
+            rt[i].next_hop[j] = j; 
+        }
+    }
+    do {
+        update_count = 0;
+        for (i = 0; i < nodes; i++) {
+            for (j = 0; j < nodes; j++) {
+                for (k = 0; k < nodes; k++) {
+                    if (rt[i].dist[j] > cost_matrix[i][k] + rt[k].dist[j]) {
+                        rt[i].dist[j] = cost_matrix[i][k] + rt[k].dist[j];
+                        rt[i].next_hop[j] = k;
+                        update_count++;
+                    }
+                }
+            }
+        }
+    } while (update_count != 0);
+    printf("\n--- Final Routing Tables ---\n");
+    for (i = 0; i < nodes; i++) {
+        printf("\nRouting Table for Router %d:\n", i + 1);
+        printf("Destination\tNext Hop\tDistance\n");
+        for (j = 0; j < nodes; j++) {
+            printf("%d\t\t%d\t\t%d\n", j + 1, rt[i].next_hop[j] + 1, rt[i].dist[j]);
+        }
+    }
+    return 0;
+}
+```
+```
+O/P
+Enter the number of nodes: 3
+
+Enter the cost matrix (use 9999 for infinity/no direct link):
+0 2 9999
+2 0 1
+9999 1 0
+
+--- Final Routing Tables ---
+
+Routing Table for Router 1:
+Destination     Next Hop        Distance
+1               1               0
+2               2               2
+3               2               3
+
+Routing Table for Router 2:
+Destination     Next Hop        Distance
+1               1               2
+2               2               0
+3               3               1
+
+Routing Table for Router 3:
+Destination     Next Hop        Distance
+1               2               3
+2               2               1
+3               3               0
+```
+
+# Leaky Bucket Algorithm
+### main.c
+```c
+#include <stdio.h>
+
+int main() {
+    int incoming, outgoing, bucket_size, n, store = 0, dropped = 0;
+    printf("Enter the bucket capacity: ");
+    scanf("%d", &bucket_size);
+    printf("Enter the outgoing rate (leak rate): ");
+    scanf("%d", &outgoing);
+    printf("Enter the number of time intervals to simulate: ");
+    scanf("%d", &n);
+    for (int i = 0; i < n; i++) {
+        printf("\n--- Time Interval %d ---\n", i + 1);
+        printf("Enter the incoming packet size: ");
+        scanf("%d", &incoming);
+        if (incoming <= (bucket_size - store)) {
+            store += incoming;
+            printf("Accepted %d packets.\n", incoming);
+        } else {
+            dropped = incoming - (bucket_size - store);
+            printf("Bucket overflow! Dropped %d packets.\n", dropped);
+            store = bucket_size;
+        }
+        if (store >= outgoing) {
+            store -= outgoing;
+            printf("Leaked %d packets. ", outgoing);
+        } else {
+            printf("Leaked %d packets. ", store);
+            store = 0;
+        }
+        printf("Current bucket status: %d / %d\n", store, bucket_size);
+    }
+    printf("\n--- Processing remaining packets in the bucket ---\n");
+    while (store > 0) {
+        if (store >= outgoing) {
+            store -= outgoing;
+            printf("Leaked %d packets. ", outgoing);
+        } else {
+            printf("Leaked %d packets. ", store);
+            store = 0;
+        }
+        printf("Current bucket status: %d / %d\n", store, bucket_size);
+    }
+    printf("\nBucket is empty. Simulation complete.\n");
+    return 0;
+}
+```
+```
+O/P
+Enter the bucket capacity: 100
+Enter the outgoing rate (leak rate): 20
+Enter the number of time intervals to simulate: 3
+
+--- Time Interval 1 ---
+Enter the incoming packet size: 40
+Accepted 40 packets.
+Leaked 20 packets. Current bucket status: 20 / 100
+
+--- Time Interval 2 ---
+Enter the incoming packet size: 90
+Bucket overflow! Dropped 10 packets.
+Leaked 20 packets. Current bucket status: 80 / 100
+
+--- Time Interval 3 ---
+Enter the incoming packet size: 10
+Accepted 10 packets.
+Leaked 20 packets. Current bucket status: 70 / 100
+
+--- Processing remaining packets in the bucket ---
+Leaked 20 packets. Current bucket status: 50 / 100
+Leaked 20 packets. Current bucket status: 30 / 100
+Leaked 20 packets. Current bucket status: 10 / 100
+Leaked 10 packets. Current bucket status: 0 / 100
+
+Bucket is empty. Simulation complete.
+```
+
+# FTP
+### client.c
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char buffer[BUFFER_SIZE] = {0};
+    char filename[256];
+    FILE *file;
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
+    }
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
+    printf("Connected to the FTP Server.\n");
+    printf("Enter the name of the file you want to download: ");
+    scanf("%s", filename);
+    send(sock, filename, strlen(filename), 0);
+    int bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);
+    if (strncmp(buffer, "ERROR:", 6) == 0) {
+        printf("%s\n", buffer);
+    } else {
+        char new_filename[300];
+        snprintf(new_filename, sizeof(new_filename), "downloaded_%s", filename);
+        file = fopen(new_filename, "wb");
+        if (file == NULL) {
+            perror("Could not create local file");
+            return -1;
+        }
+        fwrite(buffer, 1, bytes_received, file);
+        while ((bytes_received = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
+            fwrite(buffer, 1, bytes_received, file);
+        }
+        printf("File downloaded successfully as '%s'.\n", new_filename);
+        fclose(file);
+    }
+    close(sock);
+    return 0;
+}
+```
+### server.c
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[BUFFER_SIZE] = {0};
+    FILE *file;
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        exit(EXIT_FAILURE);
+    }
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        exit(EXIT_FAILURE);
+    }
+    printf("FTP Server listening on port %d...\n", PORT);
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+        perror("Accept failed");
+        exit(EXIT_FAILURE);
+    }
+    printf("Client connected.\n");
+    recv(new_socket, buffer, BUFFER_SIZE, 0);
+    printf("Client requested file: %s\n", buffer);
+    file = fopen(buffer, "rb");
+    if (file == NULL) {
+        char *error_msg = "ERROR: File not found.";
+        send(new_socket, error_msg, strlen(error_msg), 0);
+        printf("File not found. Error message sent to client.\n");
+    } else {
+        printf("Sending file...\n");
+        int bytes_read;
+        while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
+            send(new_socket, buffer, bytes_read, 0);
+        }
+        fclose(file);
+        printf("File transfer complete.\n");
+    }
+    close(new_socket);
+    close(server_fd);
+    return 0;
+}
+```
+```
+O/P client
+Connected to the FTP Server.
+Enter the name of the file you want to download: test.txt
+File downloaded successfully as 'downloaded_test.txt'.
+
+O/P server
+FTP Server listening on port 8080...
+Client connected.
+Client requested file: test.txt
+Sending file...
+File transfer complete.
 ```
