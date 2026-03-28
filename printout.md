@@ -250,426 +250,296 @@ Exit Signal Received, Shutting down server...
 
 # Sliding Window Protocols
 ## Go Back N
-### protocol.h
+### main.c
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
-#define PORT 8080
-#define WINDOW_SIZE 4
-#define TOTAL_PACKETS 10
-#define TIMEOUT_SEC 2
-
-typedef struct {
-    int seq_num;
-    char data[1024];
-} Packet;
-
-typedef struct {
-    int ack_num;
-} AckPacket;
-```
-### client.c
-```c
-#include "protocol.h"
-
-int main() {
-    int sockfd;
-    struct sockaddr_in server_addr;
-    int base = 0;
-    int next_seq = 0;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    struct timeval tv;
-    tv.tv_sec = TIMEOUT_SEC;
-    tv.tv_usec = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    printf("Starting GBN Sender (Window Size: %d)\n", WINDOW_SIZE);
-    while (base < TOTAL_PACKETS) {
-        while (next_seq < base + WINDOW_SIZE && next_seq < TOTAL_PACKETS) {
-            Packet p;
-            p.seq_num = next_seq;
-            sprintf(p.data, "Payload %d", next_seq);
-            sendto(sockfd, &p, sizeof(p), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
-            printf("--> Sent Packet %d\n", next_seq);
-            next_seq++;
-        }
-        AckPacket ack;
-        if (recvfrom(sockfd, &ack, sizeof(ack), 0, NULL, NULL) > 0) {
-            printf("<-- Received ACK %d\n", ack.ack_num);
-            if (ack.ack_num >= base) {
-                base = ack.ack_num + 1;
-            }
-        } else {
-            printf("!!! Timeout! Resending from Packet %d\n", base);
-            next_seq = base;
-        }
-    }
-    printf("All packets sent and acknowledged successfully.\n");
-    close(sockfd);
-    return 0;
-}
-```
-### server.c
-```c
-#include "protocol.h"
 #include <time.h>
-
-int main() {
-    int sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t addr_len = sizeof(client_addr);
-    int expected_seq = 0;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(PORT);
-    bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    srand(time(NULL));
-    printf("Receiver listening on port %d...\n", PORT);
-    while (expected_seq < TOTAL_PACKETS) {
-        Packet p;
-        recvfrom(sockfd, &p, sizeof(p), 0, (struct sockaddr*)&client_addr, &addr_len);
-        if (rand() % 5 == 0) {
-            printf("Dropped Packet %d (Simulated Loss)\n", p.seq_num);
-            continue; 
-        }
-        if (p.seq_num == expected_seq) {
-            printf("Received Packet %d. Sending ACK %d\n", p.seq_num, expected_seq);
-            AckPacket ack;
-            ack.ack_num = expected_seq;
-            sendto(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&client_addr, addr_len);
-            expected_seq++;
-        } else {
-            printf("Out of order Packet %d ignored. Expected %d\n", p.seq_num, expected_seq);
-        }
-    }
-    printf("All packets received. Exiting.\n");
-    close(sockfd);
-    return 0;
-}
-```
-```
-client O/P
-Starting GBN Sender (Window Size: 4)
---> Sent Packet 0
---> Sent Packet 1
---> Sent Packet 2
---> Sent Packet 3
-<-- Received ACK 0
---> Sent Packet 4
-<-- Received ACK 1
---> Sent Packet 5
-<-- Received ACK 2
---> Sent Packet 6
-<-- Received ACK 3
---> Sent Packet 7
-!!! Timeout! Resending from Packet 4
---> Sent Packet 4
---> Sent Packet 5
---> Sent Packet 6
---> Sent Packet 7
-!!! Timeout! Resending from Packet 4
---> Sent Packet 4
---> Sent Packet 5
---> Sent Packet 6
---> Sent Packet 7
-<-- Received ACK 4
---> Sent Packet 8
-!!! Timeout! Resending from Packet 5
---> Sent Packet 5
---> Sent Packet 6
---> Sent Packet 7
---> Sent Packet 8
-!!! Timeout! Resending from Packet 5
---> Sent Packet 5
---> Sent Packet 6
---> Sent Packet 7
---> Sent Packet 8
-<-- Received ACK 5
---> Sent Packet 9
-<-- Received ACK 6
-!!! Timeout! Resending from Packet 7
---> Sent Packet 7
---> Sent Packet 8
---> Sent Packet 9
-<-- Received ACK 7
-<-- Received ACK 8
-<-- Received ACK 9
-All packets sent and acknowledged successfully.
-
-server O/P
-Receiver listening on port 8080...
-Received Packet 0. Sending ACK 0
-Received Packet 1. Sending ACK 1
-Received Packet 2. Sending ACK 2
-Received Packet 3. Sending ACK 3
-Dropped Packet 4 (Simulated Loss)
-Dropped Packet 5 (Simulated Loss)
-Out of order Packet 6 ignored. Expected 4
-Dropped Packet 7 (Simulated Loss)
-Dropped Packet 4 (Simulated Loss)
-Out of order Packet 5 ignored. Expected 4
-Out of order Packet 6 ignored. Expected 4
-Out of order Packet 7 ignored. Expected 4
-Received Packet 4. Sending ACK 4
-Dropped Packet 5 (Simulated Loss)
-Out of order Packet 6 ignored. Expected 5
-Out of order Packet 7 ignored. Expected 5
-Dropped Packet 8 (Simulated Loss)
-Dropped Packet 5 (Simulated Loss)
-Out of order Packet 6 ignored. Expected 5
-Out of order Packet 7 ignored. Expected 5
-Out of order Packet 8 ignored. Expected 5
-Received Packet 5. Sending ACK 5
-Received Packet 6. Sending ACK 6
-Dropped Packet 7 (Simulated Loss)
-Out of order Packet 8 ignored. Expected 7
-Out of order Packet 9 ignored. Expected 7
-Received Packet 7. Sending ACK 7
-Received Packet 8. Sending ACK 8
-Received Packet 9. Sending ACK 9
-All packets received. Exiting.
-```
-
-## Selective Repeat
-### client.c
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <unistd.h>
-#define PORT 8080
-#define WINDOW_SIZE 4
-#define TOTAL_PACKETS 10
 
 int main() {
-    int sockfd;
-    struct sockaddr_in server_addr;
-    bool acked[TOTAL_PACKETS] = {false};
-    int base = 0, ack_num;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    struct timeval tv = {1, 0};
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    while (base < TOTAL_PACKETS) {
-        for (int i = base; i < base + WINDOW_SIZE && i < TOTAL_PACKETS; i++) {
-            if (!acked[i]) {
-                printf("Sending/Retransmitting Packet: %d\n", i);
-                sendto(sockfd, &i, sizeof(i), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
-            }
+    int window_size, total_frames, frames_sent = 0;
+    int current_frame = 1;
+    srand(time(NULL));
+    printf("--- Go-Back-N Protocol Simulation ---\n");
+    printf("Enter window size: ");
+    scanf("%d", &window_size);
+    printf("Enter total number of frames to transmit: ");
+    scanf("%d", &total_frames);
+    printf("-------------------------------------\n\n");
+    while (current_frame <= total_frames) {
+        int successful_acks = 0;
+        for (int k = current_frame; k < current_frame + window_size && k <= total_frames; k++) {
+            printf("Sending Frame %d...\n", k);
+            frames_sent++;
         }
-        while (1) {
-            if (recvfrom(sockfd, &ack_num, sizeof(ack_num), 0, NULL, NULL) > 0) {
-                printf("Received ACK for: %d\n", ack_num);
-                acked[ack_num] = true;
-                while (base < TOTAL_PACKETS && acked[base]) {
-                    base++;
-                }
+        for (int k = current_frame; k < current_frame + window_size && k <= total_frames; k++) {
+            int ack_status = rand() % 5; 
+            sleep(1);
+
+            if (ack_status != 0) {
+                printf("Acknowledgment for Frame %d received.\n", k);
+                successful_acks++;
             } else {
-                printf("Timeout! Checking window...\n");
+                printf("--> ERROR: Acknowledgment for Frame %d lost or corrupted!\n", k);
+                printf("--> Action: Go-Back-N triggered. Retransmitting from Frame %d...\n", k);
                 break;
             }
         }
+        printf("\n");
+        current_frame = current_frame + successful_acks; 
     }
-    printf("Success: All packets acknowledged.\n");
-    close(sockfd);
+    printf("-------------------------------------\n");
+    printf("Simulation Complete.\n");
+    printf("Total original frames: %d\n", total_frames);
+    printf("Total frames transmitted (including retransmissions): %d\n", frames_sent);
     return 0;
 }
 ```
-### server.c
+```
+O/P
+--- Go-Back-N Protocol Simulation ---
+Enter window size: 4
+Enter total number of frames to transmit: 10
+-------------------------------------
+
+Sending Frame 1...
+Sending Frame 2...
+Sending Frame 3...
+Sending Frame 4...
+Acknowledgment for Frame 1 received.
+Acknowledgment for Frame 2 received.
+Acknowledgment for Frame 3 received.
+--> ERROR: Acknowledgment for Frame 4 lost or corrupted!
+--> Action: Go-Back-N triggered. Retransmitting from Frame 4...
+
+Sending Frame 4...
+Sending Frame 5...
+Sending Frame 6...
+Sending Frame 7...
+Acknowledgment for Frame 4 received.
+--> ERROR: Acknowledgment for Frame 5 lost or corrupted!
+--> Action: Go-Back-N triggered. Retransmitting from Frame 5...
+
+Sending Frame 5...
+Sending Frame 6...
+Sending Frame 7...
+Sending Frame 8...
+Acknowledgment for Frame 5 received.
+Acknowledgment for Frame 6 received.
+Acknowledgment for Frame 7 received.
+Acknowledgment for Frame 8 received.
+
+Sending Frame 9...
+Sending Frame 10...
+Acknowledgment for Frame 9 received.
+Acknowledgment for Frame 10 received.
+
+-------------------------------------
+Simulation Complete.
+Total original frames: 10
+Total frames transmitted (including retransmissions): 14
+```
+
+## Selective Repeat
+### main.c
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
-#include <arpa/inet.h>
-#define PORT 8080
-#define WINDOW_SIZE 4
-#define TOTAL_PACKETS 10
-typedef struct {
-    int seq_num;
-    bool received;
-} ReceiverWindow;
+#include <time.h>
+#include <unistd.h>
+#define NOT_SENT 0
+#define SENT 1
+#define ACKED 2
 
 int main() {
-    int sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t addr_size = sizeof(client_addr);
-    ReceiverWindow buffer[TOTAL_PACKETS] = {0};
-    int window_base = 0;
-    int incoming_pkt;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    printf("Selective Repeat Server listening...\n");
-    while (window_base < TOTAL_PACKETS) {
-        recvfrom(sockfd, &incoming_pkt, sizeof(incoming_pkt), 0, (struct sockaddr*)&client_addr, &addr_size);
-        printf("Received Packet: %d ", incoming_pkt);
-        if (incoming_pkt >= window_base && incoming_pkt < window_base + WINDOW_SIZE) {
-            buffer[incoming_pkt].received = true;
-            sendto(sockfd, &incoming_pkt, sizeof(incoming_pkt), 0, (struct sockaddr*)&client_addr, addr_size);
-            printf("[ACK Sent]\n");
-            while (window_base < TOTAL_PACKETS && buffer[window_base].received) {
-                window_base++;
+    int window_size, total_frames, frames_sent_count = 0;
+    int base = 1;
+    srand(time(NULL));
+    printf("--- Selective Repeat Protocol Simulation ---\n");
+    printf("Enter window size: ");
+    scanf("%d", &window_size);
+    printf("Enter total number of frames to transmit: ");
+    scanf("%d", &total_frames);
+    printf("--------------------------------------------\n\n");
+    int *frames = (int *)calloc(total_frames + 1, sizeof(int));
+    if (frames == NULL) {
+        printf("Memory allocation failed!\n");
+        return 1;
+    }
+    while (base <= total_frames) {
+        for (int i = base; i < base + window_size && i <= total_frames; i++) {
+            if (frames[i] == NOT_SENT) {
+                printf("Sending Frame %d...\n", i);
+                frames[i] = SENT;
+                frames_sent_count++;
             }
-        } else {
-            printf("[Ignored - Outside Window]\n");
+        }
+        for (int i = base; i < base + window_size && i <= total_frames; i++) {
+            if (frames[i] == SENT) {
+                int ack_status = rand() % 5; 
+                sleep(1);
+
+                if (ack_status != 0) {
+                    printf("Acknowledgment for Frame %d received.\n", i);
+                    frames[i] = ACKED;
+                } else {
+                    printf("--> ERROR: Acknowledgment for Frame %d lost or corrupted!\n", i);
+                    printf("--> Action: Tagging Frame %d for Selective Retransmission.\n", i);
+                    frames[i] = NOT_SENT;
+                }
+            }
+        }
+        printf("\n");
+        while (base <= total_frames && frames[base] == ACKED) {
+            base++;
         }
     }
+    printf("--------------------------------------------\n");
+    printf("Simulation Complete.\n");
+    printf("Total original frames: %d\n", total_frames);
+    printf("Total frames transmitted (including retransmissions): %d\n", frames_sent_count);
+    free(frames);
     return 0;
 }
 ```
-```
-client O/P
-Sending/Retransmitting Packet: 0
-Sending/Retransmitting Packet: 1
-Sending/Retransmitting Packet: 2
-Sending/Retransmitting Packet: 3
-Received ACK for: 0
-Received ACK for: 1
-Received ACK for: 2
-Received ACK for: 3
-Timeout! Checking window...
-Sending/Retransmitting Packet: 4
-Sending/Retransmitting Packet: 5
-Sending/Retransmitting Packet: 6
-Sending/Retransmitting Packet: 7
-Received ACK for: 4
-Received ACK for: 5
-Received ACK for: 6
-Received ACK for: 7
-Timeout! Checking window...
-Sending/Retransmitting Packet: 8
-Sending/Retransmitting Packet: 9
-Received ACK for: 8
-Received ACK for: 9
-Timeout! Checking window...
-Success: All packets acknowledged.
 
-server O/P
-Selective Repeat Server listening...
-Received Packet: 0 [ACK Sent]
-Received Packet: 1 [ACK Sent]
-Received Packet: 2 [ACK Sent]
-Received Packet: 3 [ACK Sent]
-Received Packet: 4 [ACK Sent]
-Received Packet: 5 [ACK Sent]
-Received Packet: 6 [ACK Sent]
-Received Packet: 7 [ACK Sent]
-Received Packet: 8 [ACK Sent]
-Received Packet: 9 [ACK Sent]
+```
+O/P
+--- Selective Repeat Protocol Simulation ---
+Enter window size: 4
+Enter total number of frames to transmit: 10
+--------------------------------------------
+
+Sending Frame 1...
+Sending Frame 2...
+Sending Frame 3...
+Sending Frame 4...
+Acknowledgment for Frame 1 received.
+Acknowledgment for Frame 2 received.
+--> ERROR: Acknowledgment for Frame 3 lost or corrupted!
+--> Action: Tagging Frame 3 for Selective Retransmission.
+Acknowledgment for Frame 4 received.
+
+Sending Frame 3...
+Sending Frame 5...
+Sending Frame 6...
+--> ERROR: Acknowledgment for Frame 3 lost or corrupted!
+--> Action: Tagging Frame 3 for Selective Retransmission.
+Acknowledgment for Frame 5 received.
+--> ERROR: Acknowledgment for Frame 6 lost or corrupted!
+--> Action: Tagging Frame 6 for Selective Retransmission.
+
+Sending Frame 3...
+Sending Frame 6...
+Acknowledgment for Frame 3 received.
+Acknowledgment for Frame 6 received.
+
+Sending Frame 7...
+Sending Frame 8...
+Sending Frame 9...
+Sending Frame 10...
+Acknowledgment for Frame 7 received.
+Acknowledgment for Frame 8 received.
+Acknowledgment for Frame 9 received.
+--> ERROR: Acknowledgment for Frame 10 lost or corrupted!
+--> Action: Tagging Frame 10 for Selective Retransmission.
+
+Sending Frame 10...
+Acknowledgment for Frame 10 received.
+
+--------------------------------------------
+Simulation Complete.
+Total original frames: 10
+Total frames transmitted (including retransmissions): 14
 ```
 
 ## Stop and Wait
-### client.c
+### main.c
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-
-int main() {
-    int sockfd;
-    struct sockaddr_in server_addr;
-    char buffer[1024];
-    struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(8080);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    int frame_to_send = 0;
-    while (frame_to_send < 5) {
-        char msg[20];
-        sprintf(msg, "Frame %d", frame_to_send);
-        printf("Sending: %s\n", msg);
-        sendto(sockfd, msg, strlen(msg) + 1, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
-        if (recvfrom(sockfd, buffer, 1024, 0, NULL, NULL) < 0) {
-            printf("Timeout! Resending %s...\n", msg);
-        } else {
-            printf("Received: %s\n", buffer);
-            frame_to_send++;
-        }
-        sleep(1);
-    }
-    close(sockfd);
-    return 0;
-}
-```
-### server.c
-```c
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 
 int main() {
-    int sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    char buffer[1024];
-    socklen_t addr_size;
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(8080);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    addr_size = sizeof(client_addr);
-    printf("Receiver is ready to receive frames...\n");
-    int expected_frame = 0;
-    while (expected_frame < 5) {
-        recvfrom(sockfd, buffer, 1024, 0, (struct sockaddr*)&client_addr, &addr_size);
-        printf("Received: %s\n", buffer);
-        printf("Sending ACK for frame %d\n", expected_frame);
-        sendto(sockfd, "ACK", 4, 0, (struct sockaddr*)&client_addr, addr_size);
-        expected_frame++;
+    int total_frames, frames_sent_count = 0;
+    int current_frame = 1;
+    srand(time(NULL));
+    printf("--- Stop-and-Wait Protocol Simulation ---\n");
+    printf("Enter total number of frames to transmit: ");
+    scanf("%d", &total_frames);
+    printf("-----------------------------------------\n\n");
+    while (current_frame <= total_frames) {]
+        printf("Sending Frame %d...\n", current_frame);
+        frames_sent_count++;
+        int ack_status = rand() % 5; 
+        sleep(1);
+
+        if (ack_status != 0) {
+            printf("Acknowledgment for Frame %d received.\n\n", current_frame);
+            current_frame++; 
+        } else {
+            printf("--> ERROR: Acknowledgment for Frame %d lost or corrupted!\n", current_frame);
+            printf("--> Action: Timeout occurred. Retransmitting Frame %d...\n\n", current_frame);
+        }
     }
-    close(sockfd);
+    printf("-----------------------------------------\n");
+    printf("Simulation Complete.\n");
+    printf("Total original frames: %d\n", total_frames);
+    printf("Total frames transmitted (including retransmissions): %d\n", frames_sent_count);
     return 0;
 }
 ```
-```
-client O/P
-Sending: Frame 0
-Received: ACK
-Sending: Frame 1
-Received: ACK
-Sending: Frame 2
-Received: ACK
-Sending: Frame 3
-Received: ACK
-Sending: Frame 4
-Received: ACK
 
-server O/P
-Receiver is ready to receive frames...
-Received: Frame 0
-Sending ACK for frame 0
-Received: Frame 1
-Sending ACK for frame 1
-Received: Frame 2
-Sending ACK for frame 2
-Received: Frame 3
-Sending ACK for frame 3
-Received: Frame 4
-Sending ACK for frame 4
+```
+O/P
+--- Stop-and-Wait Protocol Simulation ---
+Enter total number of frames to transmit: 10
+-----------------------------------------
+
+Sending Frame 1...
+Acknowledgment for Frame 1 received.
+
+Sending Frame 2...
+Acknowledgment for Frame 2 received.
+
+Sending Frame 3...
+Acknowledgment for Frame 3 received.
+
+Sending Frame 4...
+Acknowledgment for Frame 4 received.
+
+Sending Frame 5...
+Acknowledgment for Frame 5 received.
+
+Sending Frame 6...
+--> ERROR: Acknowledgment for Frame 6 lost or corrupted!
+--> Action: Timeout occurred. Retransmitting Frame 6...
+
+Sending Frame 6...
+Acknowledgment for Frame 6 received.
+
+Sending Frame 7...
+--> ERROR: Acknowledgment for Frame 7 lost or corrupted!
+--> Action: Timeout occurred. Retransmitting Frame 7...
+
+Sending Frame 7...
+Acknowledgment for Frame 7 received.
+
+Sending Frame 8...
+Acknowledgment for Frame 8 received.
+
+Sending Frame 9...
+Acknowledgment for Frame 9 received.
+
+Sending Frame 10...
+Acknowledgment for Frame 10 received.
+
+-----------------------------------------
+Simulation Complete.
+Total original frames: 10
+Total frames transmitted (including retransmissions): 12
 ```
 
 # DVR Algorithm
