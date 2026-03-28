@@ -58,3 +58,31 @@ int main() {
 
     return 0;
 }
+
+
+/*
+O/P
+Enter the bucket capacity: 10
+Enter the outgoing rate (leak rate): 4
+Enter the number of time intervals to simulate: 3
+
+--- Time Interval 1 ---
+Enter the incoming packet size: 9
+Accepted 9 packets.
+Leaked 4 packets. Current bucket status: 5 / 10
+
+--- Time Interval 2 ---
+Enter the incoming packet size: 7
+Bucket overflow! Dropped 2 packets.
+Leaked 4 packets. Current bucket status: 6 / 10
+
+--- Time Interval 3 ---
+Enter the incoming packet size: 2
+Accepted 2 packets.
+Leaked 4 packets. Current bucket status: 4 / 10
+
+--- Processing remaining packets in the bucket ---
+Leaked 4 packets. Current bucket status: 0 / 10
+
+Bucket is empty. Simulation complete.
+*/
