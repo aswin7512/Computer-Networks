@@ -69,38 +69,38 @@ O/P
 Enter the number of nodes: 4
 
 Enter the cost matrix (use 9999 for infinity/no direct link):
-1 3 8 2
-9999 3 4 1
-4 2 5 9999
-1 1 4 5
+0 2 4 9999
+1 0 3 4
+5 4 0 3
+9999 2 2 0
 
 --- Final Routing Tables ---
 
 Routing Table for Router 1:
 Destination     Next Hop        Distance
 1               1               0
-2               2               3
-3               4               6
-4               4               2
+2               2               2
+3               3               4
+4               2               6
 
 Routing Table for Router 2:
 Destination     Next Hop        Distance
-1               4               2
+1               1               1
 2               2               0
-3               3               4
-4               4               1
+3               3               3
+4               4               4
 
 Routing Table for Router 3:
 Destination     Next Hop        Distance
-1               1               4
-2               2               2
+1               1               5
+2               2               4
 3               3               0
-4               2               3
+4               4               3
 
 Routing Table for Router 4:
 Destination     Next Hop        Distance
-1               1               1
-2               2               1
-3               3               4
+1               2               3
+2               2               2
+3               3               2
 4               4               0
 */
