@@ -71,3 +71,11 @@ int main() {
     close(server_fd);
     return 0;
 }
+
+/*
+FTP Server listening on port 8080...
+Client connected.
+Client requested file: test.txt
+Sending file...
+File transfer complete.
+*/

@@ -74,3 +74,9 @@ int main() {
     close(sock);
     return 0;
 }
+
+/*
+Connected to the FTP Server.
+Enter the name of the file you want to download: test.txt
+File downloaded successfully as 'downloaded_test.txt'.
+*/
